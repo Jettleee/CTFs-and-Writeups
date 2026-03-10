@@ -13,7 +13,8 @@ The vulnerability is a classic **Use-After-Free**: the `delete_note` function ca
 First, let's check what we're dealing with:
 
 
-![[Pasted image 20260215222252.png]]
+<img width="667" height="152" alt="image" src="https://github.com/user-attachments/assets/c1b4ba0e-aec0-4bb4-a265-610c1b01162c" />
+
 
 Everything is on. Full RELRO means we can't overwrite GOT entries. PIE means addresses are randomized. We need leaks and a creative code execution path.
 
@@ -191,11 +192,13 @@ gdb> run
 
 After creating and freeing note 0, inspect the heap:
 
-![[Pasted image 20260215232021.png]]
+<img width="967" height="612" alt="image" src="https://github.com/user-attachments/assets/649e2b40-2f0a-4b3a-a8fa-bf044ce28542" />
+
 
 The fact that option 3 works on a deleted note **is the bug**. You just read freed memory.
 
-![[Pasted image 20260215232422.png]]
+<img width="721" height="236" alt="image" src="https://github.com/user-attachments/assets/e779e6e0-efeb-477b-8e0c-c24700c5b093" />
+
 
 
 The first 8 bytes of the freed chunk's user data is the obfuscated `fd`. Since it's the only chunk in this Tcache bin, it equals `chunk_addr >> 12`, which directly gives us the heap base when shifted back.
@@ -237,7 +240,8 @@ libc_base = unsorted_fd - 0x1e7c10  # offset specific to this libc build
 
 After freeing all 8 chunks, inspect the bins:
 
-![[Pasted image 20260215234926.png]]
+<img width="1077" height="631" alt="image" src="https://github.com/user-attachments/assets/b077e5af-5fcd-4bad-a7b1-bfde8cf9fd03" />
+
 You can also verify the offset:
 
 ```
