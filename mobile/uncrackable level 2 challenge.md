@@ -1,52 +1,52 @@
 
-# 🕵️‍♂️ Lab Sécurité Android : Reverse Engineering Natif (UnCrackable Level 2)
+# 🕵️‍♂️ Android Security Lab: Native Reverse Engineering (UnCrackable Level 2)
 
-Ce laboratoire documente l'analyse avancée d'une application Android qui dissimule sa logique critique dans une bibliothèque native (C/C++). Contrairement à une simple analyse de bytecode Java, ce challenge nécessite de faire le pont entre l'interface Java et le code binaire natif via JNI (Java Native Interface), en utilisant des outils comme **JADX** et **Ghidra**.
+This lab documents the advanced analysis of an Android application that hides its critical logic inside a native library (C/C++). Unlike a simple Java bytecode analysis, this challenge requires bridging the Java interface and the native binary code via JNI (Java Native Interface), using tools like **JADX** and **Ghidra**.
 
-> **Environnement :** Laboratoire réalisé sous **Kali Linux**. Les recommandations du standard OWASP MASTG concernant l'analyse de bibliothèques ELF `.so` ont été appliquées.
+> **Environment:** Lab performed on **Kali Linux**. The OWASP MASTG standard's recommendations for analyzing ELF `.so` libraries were applied.
 
 ---
 
-## ☕ Phase 1 : Analyse Statique de la couche Java (JADX)
+## ☕ Phase 1: Static Analysis of the Java Layer (JADX)
 
-L'application présente un simple champ de texte et un bouton de validation. Pour comprendre ce qu'il se passe lors du clic, nous commençons par analyser le code Java.
+The application presents a simple text field and a validate button. To understand what happens on click, we start by analyzing the Java code.
 
-### Étape 1 : Point d'entrée dans `MainActivity`
-Nous ouvrons l'APK dans JADX pour inspecter la classe `MainActivity`, qui gère l'interface utilisateur.
+### Step 1: Entry point in `MainActivity`
+We open the APK in JADX to inspect the `MainActivity` class, which handles the user interface.
 
 ```bash
 jadx-gui UnCrackable-Level2.apk
 ```
-*Observation : L'entrée utilisateur (la chaîne tapée) est récupérée puis envoyée à une méthode de validation externe, souvent sous la forme `m.a(userInput)`.*
+*Observation: The user input (the typed string) is retrieved and then sent to an external validation method, usually in the form `m.a(userInput)`.*
 
 
 <img width="1478" height="718" alt="image" src="https://github.com/user-attachments/assets/df799903-395f-46f5-ac45-69d3e89de022" />
 
 
-### Étape 2 : Identification du pont JNI (`CodeCheck`)
-En suivant le chemin de la donnée depuis `MainActivity`, nous aboutissons à la classe `CodeCheck`.
+### Step 2: Identifying the JNI bridge (`CodeCheck`)
+Following the data path from `MainActivity`, we end up at the `CodeCheck` class.
 
-*Observation : Cette classe ne contient pas la logique de validation en clair. Elle révèle deux éléments cruciaux :*
-1. Le chargement d'une librairie native : `System.loadLibrary("foo");`
-2. La déclaration d'une méthode externe : `private native boolean bar(String s);`
+*Observation: This class does not contain the validation logic in plain sight. It reveals two crucial elements:*
+1. Loading a native library: `System.loadLibrary("foo");`
+2. Declaring an external method: `private native boolean bar(String s);`
 
 <img width="761" height="438" alt="image" src="https://github.com/user-attachments/assets/155fa2dd-84dd-498b-9e60-8f352d333b07" />
 
 
 ---
 
-## 🛠️ Phase 2 : Extraction et Analyse Binaire (Ghidra)
+## 🛠️ Phase 2: Binary Extraction and Analysis (Ghidra)
 
-Le secret n'étant pas en Java, nous devons extraire et analyser la bibliothèque compilée `libfoo.so`.
+Since the secret isn't in Java, we need to extract and analyze the compiled `libfoo.so` library.
 
-### Étape 3 : Extraction de l'archive
-L'APK contient différentes versions de la librairie selon l'architecture du processeur (ARM, x86). Une seule suffit pour notre analyse statique.
+### Step 3: Extracting the archive
+The APK contains different versions of the library depending on the CPU architecture (ARM, x86). Only one is needed for our static analysis.
 
 ```bash
-# Extraction de l'APK
+# Extracting the APK
 unzip UnCrackable-Level2.apk -d uncrackable_l2
 
-# Localisation des librairies natives
+# Locating the native libraries
 ls -R uncrackable_l2/lib
 ```
 <img width="593" height="55" alt="image" src="https://github.com/user-attachments/assets/0e2e17c8-84d8-4b94-accf-bfa247d15ae7" />
@@ -54,48 +54,50 @@ ls -R uncrackable_l2/lib
 <img width="1815" height="392" alt="image" src="https://github.com/user-attachments/assets/a052c188-e737-4d96-a759-5002520039a0" />
 
 
-### Étape 4 : Importation dans Ghidra et recherche du symbole JNI
-Nous lançons Ghidra (l'outil de reverse engineering de la NSA) pour analyser le fichier `uncrackable_l2/lib/x86/libfoo.so`.
+### Step 4: Importing into Ghidra and finding the JNI symbol
+We launch Ghidra (the NSA's reverse engineering tool) to analyze the `uncrackable_l2/lib/x86/libfoo.so` file.
 
-*Action : Après l'analyse automatique, nous cherchons la fonction JNI exportée correspondant à la méthode `bar`.*
-*Observation : Selon les conventions de nommage JNI, la fonction se nomme `Java_sg_vantagepoint_uncrackable2_CodeCheck_bar`.*
-**![Capture 4 : Recherche du symbole JNI dans Ghidra](assets/capture_4_ghidra_jni.png)**
+*Action: After the automatic analysis, we look for the exported JNI function matching the `bar` method.*
+*Observation: Following JNI naming conventions, the function is named `Java_sg_vantagepoint_uncrackable2_CodeCheck_bar`.*
+**![Capture 4: Finding the JNI symbol in Ghidra](assets/capture_4_ghidra_jni.png)**
 
-Étape 5 : Analyse du pseudo-code natif et découverte du secret
+Step 5: Analyzing the native pseudo-code and discovering the secret
 
-En ouvrant la fonction dans le décompilateur de Ghidra, nous inspectons le comportement du binaire.
+Opening the function in Ghidra's decompiler, we inspect the binary's behavior.
 
-Observation : Le pseudo-code (fenêtre de droite) révèle directement l'utilisation de la fonction builtin_strncpy.
+Observation: The pseudo-code (right-hand window) directly reveals the use of the `__builtin_strncpy` function.
 C
 
-builtin_strncpy(local_38, "Thanks for all the fish", 0x18);
-// ... plus loin ...
+```
+__builtin_strncpy(local_38, "Thanks for all the fish", 0x18);
+// ... further down ...
 iVar1 = strncmp(__s1, local_38, 0x17);
+```
 
-Contrairement à d'autres variantes de ce challenge où le secret est obfusqué (ex: stocké en hexadécimal inversé), cette version spécifique compile la chaîne secrète en clair. La fonction compare directement notre entrée (__s1) avec la variable local_38 contenant le secret non chiffré.
+Unlike other variants of this challenge where the secret is obfuscated (e.g. stored as reversed hex), this specific version compiles the secret string in plain sight. The function directly compares our input (`__s1`) with the `local_38` variable holding the unencrypted secret.
 
-(Note : L'image correspondante est la capture d'écran globale de l'interface Ghidra montrant l'arbre des symboles à gauche et le pseudo-code à droite).
+(Note: The corresponding image is the overall screenshot of the Ghidra interface, showing the symbol tree on the left and the pseudo-code on the right).
 <img width="1909" height="722" alt="image" src="https://github.com/user-attachments/assets/0e827f59-44bb-400d-aef2-547ff5a5e9a1" />
 
 
 
-## ✅ Phase 4 : Validation du Challenge
+## ✅ Phase 4: Challenge Validation
 
-### Étape 8 : Test du secret
-De retour sur l'émulateur, nous saisissons le secret découvert : `Thanks for all the fish`.
-L'application valide l'entrée, confirmant le succès de notre reverse engineering.
+### Step 8: Testing the secret
+Back on the emulator, we enter the discovered secret: `Thanks for all the fish`.
+The application accepts the input, confirming our reverse engineering was successful.
 
 <img width="514" height="969" alt="image" src="https://github.com/user-attachments/assets/7481abc8-89a8-45b4-a1c8-2d1f1abbe329" />
 
 
 ---
 
-## 🧠 Résumé du flux logique de l'application (Data Flow)
+## 🧠 Summary of the Application's Logic Flow (Data Flow)
 
-Pour bien comprendre le pont entre les différentes technologies, voici le chemin suivi par la donnée saisie :
+To clearly understand the bridge between the different technologies, here's the path followed by the input data:
 
 ```text
-Utilisateur saisit le texte
+User enters text
    ↓
 [JAVA] MainActivity
    ↓
@@ -105,10 +107,10 @@ Utilisateur saisit le texte
    ↓
 [C/C++] libfoo.so
    ↓
-[C/C++] strncmp(input, secret_interne)
+[C/C++] strncmp(input, internal_secret)
    ↓
-Retour du résultat (Succès / Échec)
+Result returned (Success / Failure)
 ```
 
-**Conclusion :** Ce laboratoire démontre une technique d'obfuscation classique en sécurité mobile. Déplacer la logique sensible du code Java (facilement décompilable) vers du code natif C/C++ rend l'analyse plus ardue, nécessitant la maîtrise d'outils d'analyse binaire comme Ghidra et la compréhension de l'interface JNI.
+**Conclusion:** This lab demonstrates a classic obfuscation technique in mobile security. Moving sensitive logic from Java code (easily decompiled) into native C/C++ code makes analysis harder, requiring proficiency with binary analysis tools like Ghidra and an understanding of the JNI interface.
 ```
