@@ -1,29 +1,29 @@
-# Writeup : PwnSecCTF - Challenge "Snake" (Android)
+# Writeup: PwnSecCTF - "Snake" Challenge (Android)
 
-Ce dépôt documente la méthodologie de résolution du challenge Android **Snake** issu du PwnSecCTF. Ce défi se distingue par l'impossibilité d'utiliser Frida en raison de ses mécanismes de protection, obligeant l'attaquant à combiner l'analyse statique, le patching de bytecode et l'exploitation d'une faille de désérialisation.
+This repository documents the methodology used to solve the Android **Snake** challenge from PwnSecCTF. This challenge stands out for making Frida unusable due to its protection mechanisms, forcing the attacker to combine static analysis, bytecode patching, and exploitation of a deserialization flaw.
 
-## 🎯 Aperçu du Challenge
+## 🎯 Challenge Overview
 
-* **Application cible :** `Snake`
-* **Protections rencontrées :**
-* Détection de Root stricte.
-* Détection de Frida (rendant l'instrumentation dynamique inutilisable).
+* **Target application:** `Snake`
+* **Protections encountered:**
+* Strict root detection.
+* Frida detection (making dynamic instrumentation unusable).
 
 
-* **Vecteur d'attaque principal :** Faille de désérialisation via la bibliothèque `SnakeYAML` (CVE-2022-1471).
+* **Main attack vector:** Deserialization vulnerability via the `SnakeYAML` library (CVE-2022-1471).
 
 ---
 
-## 🛠️ Étape 1 : Contournement de la Détection de Root (Patching)
+## 🛠️ Step 1: Bypassing Root Detection (Patching)
 
-Puisque Frida est bloqué par l'application, l'approche dynamique classique pour contourner la détection de root n'est pas viable. Il faut modifier l'application à la source.
+Since Frida is blocked by the application, the classic dynamic approach to bypass root detection isn't viable. We need to modify the application at the source.
 
-**Méthodologie :**
+**Methodology:**
 
-1. **Décompilation :** Utilisation d'outils comme `Apktool` ou `Apklab` pour extraire le code Smali de l'application.
-2. **Analyse de la restriction :** L'analyse du code (visible initialement via JADX) révèle une fonction de détection de root empêchant l'application de s'exécuter sur un émulateur ou un appareil rooté.
-3. **Patching manuel :** Modification du code Smali pour inverser ou neutraliser la logique de vérification du root.
-4. **Recompilation et Signature :** L'APK modifié est recompilé, signé, puis installé sur l'appareil. Une fois lancée, l'application fonctionne parfaitement et demande les permissions d'accès au stockage externe.
+1. **Decompilation:** Using tools like `Apktool` or `Apklab` to extract the application's Smali code.
+2. **Analyzing the restriction:** Analyzing the code (initially visible via JADX) reveals a root detection function preventing the application from running on an emulator or rooted device.
+3. **Manual patching:** Modifying the Smali code to invert or neutralize the root-check logic.
+4. **Recompiling and signing:** The modified APK is recompiled, signed, then installed on the device. Once launched, the application works perfectly and requests external storage access permissions.
 
 > <img width="768" height="692" alt="image" src="https://github.com/user-attachments/assets/e978bac3-4d23-4114-88c7-7809e64dc168" />
 
@@ -32,45 +32,45 @@ Puisque Frida est bloqué par l'application, l'approche dynamique classique pour
 
 ---
 
-## 🔍 Étape 2 : Analyse Statique et Découverte des Mécanismes (Intents)
+## 🔍 Step 2: Static Analysis and Discovering the Mechanisms (Intents)
 
-Une fois l'application fonctionnelle, l'objectif est de comprendre son fonctionnement interne et ce qu'elle attend de l'utilisateur.
+Once the application is functional, the goal is to understand its internal behavior and what it expects from the user.
 
-**Méthodologie :**
+**Methodology:**
 
-1. **Inspection des Intents :** L'analyse du code révèle que l'application écoute un `Intent` spécifique.
-2. **Conditions de déclenchement :** L'application vérifie si l'Intent reçu contient une donnée supplémentaire (Extra) nommée `"SNAKE"` dont la valeur exacte doit être `"BigBoss"`.
-3. **Comportement attendu :** Si cette condition est remplie, l'application tente d'accéder au stockage externe pour lire un fichier YAML situé dans `Snake/Skull_Face.yml`. Si le fichier est trouvé, son contenu est chargé et affiché dans les logs de l'appareil.
+1. **Inspecting Intents:** Code analysis reveals that the application listens for a specific `Intent`.
+2. **Trigger conditions:** The application checks whether the received Intent contains an extra named `"SNAKE"` whose exact value must be `"BigBoss"`.
+3. **Expected behavior:** If this condition is met, the application attempts to access external storage to read a YAML file located at `Snake/Skull_Face.yml`. If the file is found, its content is loaded and printed to the device logs.
 
 > <img width="931" height="398" alt="image" src="https://github.com/user-attachments/assets/68d12f7c-9cdc-4615-aea8-70347c816c2f" />
 
 
 ---
 
-## 🧠 Étape 3 : Rétro-ingénierie et Identification de la Vulnérabilité
+## 🧠 Step 3: Reverse Engineering and Identifying the Vulnerability
 
-En continuant d'explorer le code source, nous découvrons les éléments nécessaires pour forger notre attaque.
+Continuing to explore the source code, we find the pieces needed to forge our attack.
 
-**Méthodologie :**
+**Methodology:**
 
-1. **Découverte de la classe cachée :** Une classe nommée `BigBoss` est identifiée. Elle n'est appelée nulle part dans le flux normal de l'application.
-2. **Analyse de la classe `BigBoss` :**
-* Cette classe charge une bibliothèque native et appelle une fonction `stringFromJNI`.
-* Elle possède une méthode qui prend une chaîne de caractères en paramètre. Si cette chaîne est exactement `"Snaaaaaaaaaaaaaake"`, le flag est généré et affiché dans les logs.
+1. **Discovering the hidden class:** A class named `BigBoss` is identified. It is never called anywhere in the app's normal flow.
+2. **Analyzing the `BigBoss` class:**
+* This class loads a native library and calls a `stringFromJNI` function.
+* It has a method that takes a string parameter. If that string is exactly `"Snaaaaaaaaaaaaaake"`, the flag is generated and printed to the logs.
 
 
-3. **Identification de la faille :** Comment appeler une classe qui n'est jamais instanciée ? La réponse réside dans le fichier YAML. L'application utilise une ancienne version de la bibliothèque `snakeyaml`, vulnérable à une attaque de désérialisation (CVE-2022-1471).
+3. **Identifying the flaw:** How do you call a class that's never instantiated? The answer lies in the YAML file. The application uses an outdated version of the `snakeyaml` library, vulnerable to a deserialization attack (CVE-2022-1471).
 
 ---
 
-## 🧨 Étape 4 : Exploitation via Désérialisation YAML
+## 🧨 Step 4: Exploitation via YAML Deserialization
 
-L'objectif final est de construire un payload YAML malveillant qui va forcer la vulnérabilité de désérialisation à instancier la classe cachée avec le bon paramètre.
+The final goal is to build a malicious YAML payload that forces the deserialization vulnerability to instantiate the hidden class with the correct parameter.
 
-**Méthodologie :**
+**Methodology:**
 
-1. **Création de l'environnement :** Création d'un dossier `Snake` à la racine du stockage externe de l'appareil Android, contenant un fichier nommé `skull_Face.yml`.
-2. **Forgeage du Payload :** Insertion de la charge utile suivante dans le fichier YAML. Ce payload exploite la vulnérabilité pour appeler la classe `BigBoss` en lui passant la chaîne attendue :
+1. **Setting up the environment:** Creating a `Snake` folder at the root of the Android device's external storage, containing a file named `skull_Face.yml`.
+2. **Forging the payload:** Inserting the following payload into the YAML file. This payload exploits the vulnerability to call the `BigBoss` class, passing it the expected string:
 ```yaml
 !!com.pwnsec.snake.BigBoss ["Snaaaaaaaaaaaaaake"]
 
@@ -79,18 +79,18 @@ L'objectif final est de construire un payload YAML malveillant qui va forcer la 
 
 
 ```
-3. **Déclenchement de l'attaque :** Utilisation d'ADB (Android Debug Bridge) pour envoyer l'Intent forgé et déclencher la lecture du fichier YAML malveillant :
+3. **Triggering the attack:** Using ADB (Android Debug Bridge) to send the forged Intent and trigger the reading of the malicious YAML file:
    ```bash
    adb shell am start -n com.pwnsec.snake/.MainActivity -e SNAKE BigBoss
 
 ```
 
-4. **Récupération du Flag :** La désérialisation s'exécute, la classe est instanciée avec succès, et le flag est imprimé dans le logcat.
+4. **Retrieving the flag:** The deserialization executes, the class is successfully instantiated, and the flag is printed to logcat.
 
 > <img width="773" height="25" alt="image" src="https://github.com/user-attachments/assets/52452cf5-128d-4c11-a295-51a49a5a0111" />
 
 
-### 🎉 Résultat Final
+### 🎉 Final Result
 
-Le flag a été extrait avec succès depuis les logs :
+The flag was successfully extracted from the logs:
 **`PWNSEC{W3'r3_N0t_T00l5_0f_The_g0v3rnm3n7_0R_4ny0n3_3ls3}`**

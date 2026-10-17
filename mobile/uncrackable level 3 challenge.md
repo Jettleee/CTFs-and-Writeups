@@ -1,28 +1,28 @@
-# Writeup : OWASP UnCrackable Level 3 (Android)
+# Writeup: OWASP UnCrackable Level 3 (Android)
 
-Ce dépôt contient la méthodologie détaillée et les étapes de résolution du challenge **UnCrackable Level 3** de l'OWASP. Ce défi met en œuvre des protections avancées telles que la détection de root, la détection dynamique de Frida au niveau natif (`.so`), et une vérification cryptographique implémentée en C.
+This repository contains the detailed methodology and resolution steps for OWASP's **UnCrackable Level 3** challenge. This challenge implements advanced protections such as root detection, dynamic Frida detection at the native level (`.so`), and a cryptographic check implemented in C.
 
-## 🎯 Aperçu du Challenge
+## 🎯 Challenge Overview
 
-* **Objectif :** Trouver le secret (flag) caché dans l'application.
-* **Protections rencontrées :**
-* Détection de Root (Couche Java)
-* Détection anti-tampering / anti-Frida (Couche Native)
-* Chiffrement XOR pour la validation du flag
+* **Goal:** Find the secret (flag) hidden in the application.
+* **Protections encountered:**
+* Root detection (Java layer)
+* Anti-tampering / anti-Frida detection (Native layer)
+* XOR encryption for flag validation
 
 
 
 ---
 
-## 🛠️ Étape 1 : Analyse Initiale et Détection de Root
+## 🛠️ Step 1: Initial Analysis and Root Detection
 
-Lors du premier lancement de l'application sur un émulateur ou un appareil rooté, l'application se ferme immédiatement après avoir affiché un message d'erreur.
+On the first launch on an emulator or rooted device, the application closes immediately after displaying an error message.
 
-**Méthodologie :**
+**Methodology:**
 
-1. **Analyse Statique :** En décompilant l'APK (avec `JADX` ou `Apktool`), nous identifions la classe `RootDetection`.
-2. Cette classe utilise trois méthodes distinctes (`checkRoot1`, `checkRoot2`, `checkRoot3`) pour vérifier la présence du binaire `su`, des clés de test (`test-keys`) et d'autres fichiers liés au root.
-3. **Résolution :** L'approche consiste à écrire un petit script Frida pour intercepter ("hooker") ces trois méthodes Java et les forcer à retourner `false`, simulant ainsi un environnement non-rooté.
+1. **Static Analysis:** By decompiling the APK (with `JADX` or `Apktool`), we identify the `RootDetection` class.
+2. This class uses three distinct methods (`checkRoot1`, `checkRoot2`, `checkRoot3`) to check for the presence of the `su` binary, `test-keys`, and other root-related files.
+3. **Resolution:** The approach is to write a small Frida script to hook these three Java methods and force them to return `false`, simulating a non-rooted environment.
 
 > <img width="433" height="622" alt="image" src="https://github.com/user-attachments/assets/7ff05ea1-0e5a-4094-84a5-0267c38979b5" />
 
@@ -31,19 +31,20 @@ Lors du premier lancement de l'application sur un émulateur ou un appareil root
 
 ---
 
-## 🛡️ Étape 2 : Détection et Contournement de Frida (Couche Native)
+## 🛡️ Step 2: Detecting and Bypassing Frida (Native Layer)
 
-Après avoir exécuté le premier script Frida, l'application crashe de manière inattendue, coupant la connexion avec Frida.
+After running the first Frida script, the application crashes unexpectedly, cutting off the Frida connection.
 
-**Méthodologie :**
+**Methodology:**
 
-1. **Analyse Dynamique (Logs) :** En inspectant le `logcat` d'Android au moment du crash, nous remarquons un appel à une fonction `goodbye` provenant de la bibliothèque native **`libfoo.so`**.
-2. **Rétro-ingénierie de la lib (`Ghidra`) :** * L'analyse de `libfoo.so` révèle qu'une fonction d'initialisation (`_INIT_0`) lance un thread secondaire dès le démarrage.
-* Ce thread lit en boucle le fichier `/proc/self/maps` (qui liste les zones mémoire du processus).
-* Il utilise la fonction C `strstr` pour chercher la chaîne de caractères `"frida"`. Si elle est trouvée, le programme appelle `goodbye` et s'arrête.
+1. **Dynamic Analysis (Logs):** Inspecting Android's `logcat` at the moment of the crash, we notice a call to a `goodbye` function coming from the native library **`libfoo.so`**.
+2. **Reverse engineering the lib (`Ghidra`):**
+* Analyzing `libfoo.so` reveals that an init function (`_INIT_0`) spawns a secondary thread right at startup.
+* This thread repeatedly reads the `/proc/self/maps` file (which lists the process's memory regions).
+* It uses the C function `strstr` to search for the string `"frida"`. If found, the program calls `goodbye` and stops.
 
 
-3. **Résolution :** Il faut mettre à jour notre script Frida pour intercepter la fonction native `strstr`. Si l'argument passé contient le mot "frida", on force la valeur de retour de `strstr` à `0` (indiquant qu'aucune correspondance n'a été trouvée).
+3. **Resolution:** We need to update our Frida script to hook the native `strstr` function. If the passed argument contains the word "frida", we force `strstr`'s return value to `0` (indicating no match was found).
 
 > <img width="755" height="440" alt="image" src="https://github.com/user-attachments/assets/61ad5eef-92b7-47d7-8931-81334c66f686" />
 
@@ -56,24 +57,24 @@ Après avoir exécuté le premier script Frida, l'application crashe de manière
 
 ---
 
-## 🔑 Étape 3 : Analyse Cryptographique et Extraction du Flag
+## 🔑 Step 3: Cryptographic Analysis and Flag Extraction
 
-Une fois l'application stabilisée (Root et Frida bypassés), nous pouvons analyser la logique de validation du mot de passe.
+Once the application is stabilized (root and Frida bypassed), we can analyze the password validation logic.
 
-**Méthodologie :**
+**Methodology:**
 
-1. **Traçage de l'input :** L'entrée utilisateur est envoyée à la méthode native `bar` dans `libfoo.so`.
-2. **Identification des contraintes :**
-* Une vérification de la longueur exige que notre chaîne fasse exactement **24 caractères**.
-* L'application génère une clé globale (`xorkey`) dans la couche Java et l'envoie à l'initialisation native.
-
-
-3. **Analyse de la fonction de validation (`FUN_001012c0`) :**
-* La fonction charge en mémoire une série d'octets hexadécimaux figés en dur.
-* Elle effectue une boucle appliquant une opération **XOR** entre notre input, les octets hexadécimaux et la clé `xorkey`.
+1. **Tracing the input:** The user input is sent to the native `bar` method in `libfoo.so`.
+2. **Identifying the constraints:**
+* A length check requires our string to be exactly **24 characters**.
+* The application generates a global key (`xorkey`) in the Java layer and sends it to native initialization.
 
 
-4. **Extraction (CyberChef) :** Plutôt que de forcer la validation, nous pouvons inverser l'algorithme. Il suffit d'extraire la séquence hexadécimale depuis Ghidra, puis de recréer l'opération hors-ligne avec la clé `xorkey`.
+3. **Analyzing the validation function (`FUN_001012c0`):**
+* The function loads a series of hardcoded hex bytes into memory.
+* It runs a loop applying a **XOR** operation between our input, the hex bytes, and the `xorkey`.
+
+
+4. **Extraction (CyberChef):** Rather than brute-forcing the validation, we can reverse the algorithm. We just need to extract the hex sequence from Ghidra, then recreate the operation offline using the `xorkey`.
 
 > <img width="877" height="233" alt="image" src="https://github.com/user-attachments/assets/f4a3dad3-9e4a-4358-84cc-f508fcdb2f9e" />
 
@@ -82,6 +83,6 @@ Une fois l'application stabilisée (Root et Frida bypassés), nous pouvons analy
 > <img width="621" height="366" alt="image" src="https://github.com/user-attachments/assets/83e7e023-3d59-4201-a404-54209a9bacad" />
 
 
-### Résultat final
+### Final result
 
-Le flag obtenu après déchiffrement est : **`making owasp great again`**
+The flag obtained after decryption is: **`making owasp great again`**
