@@ -1,18 +1,18 @@
 # CTFs and Writeups
 
-Mes writeups de CTF et de labs, classés par catégorie.
+My CTF and lab writeups, organized by category.
 
-## Contenu
+## Contents
 
 ### 📂 PWN
-Writeups binary exploitation (heap, pwn classique, etc.), niveau glibc moderne (UAF, protections full RELRO/PIE/canary).
+Binary exploitation writeups (heap, classic pwn, etc.) targeting modern glibc (UAF, full RELRO/PIE/canary protections).
 
 ### 📂 HTB labs
-Writeups de labs HackTheBox Academy / CPTS. Le premier (`AEN part1`) couvre une attaque complète sur un environnement Active Directory segmenté : recon externe, FTP anonyme, zone transfer DNS, vhost fuzzing, SQLi, RCE WordPress, XSS → session hijacking, command injection, privesc Linux, pivoting réseau, misconfig NFS, jusqu'au shell SYSTEM.
+HackTheBox Academy / CPTS lab writeups. The first one (`AEN part1`) covers a full attack chain against a segmented Active Directory environment: external recon, anonymous FTP, DNS zone transfer, vhost fuzzing, SQLi, WordPress RCE, XSS → session hijacking, command injection, Linux privesc, network pivoting, NFS misconfiguration, all the way to a SYSTEM shell.
 
 ### 📂 mobile
-Writeups de reverse engineering Android (Frida, Ghidra, JNI, bypass root/anti-Frida, désérialisation YAML).
+Android reverse engineering writeups (Frida, Ghidra, JNI, root/anti-Frida bypass, YAML deserialization).
 
 ---
 
-**Auteur :** Youssef CHARAF ([@Jettleee](https://github.com/Jettleee))
+**Author:** Youssef CHARAF ([@Jettleee](https://github.com/Jettleee))
